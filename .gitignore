@@ -1,0 +1,7 @@
+# ignore all .csv files
+*.csv
+
+# ignore all .npy files 
+*.npy
+
+
