@@ -41,7 +41,7 @@ def train_and_evaluate(X_train, y_train, X_val, y_val, field_indices, epochs, lr
     num_fields = len(np.unique(field_indices))  # Number of unique fields
     model = FieldAwareFactorizationMachineModel(num_fields, input_dim, k).to(device)
     criterion = nn.BCELoss()
-    optimizer = optim.SGD(model.parameters(), lr=lr)
+    optimizer = optim.SGD(model.parameters(), lr=lr, weight_decay=1e-4)
 
     train_dataset = TensorDataset(
         torch.tensor(X_train.values, dtype=torch.float32),
@@ -129,8 +129,8 @@ if __name__ == "__main__":
     val_data = pd.read_csv("./Data/processed/val.csv")
     print("Data loaded, start training...")
 
-    exp_info = f"batch_{args.batch}_epoch_{args.epoch}_lr_{args.lr}_k_{args.k}"
-    session_name = f"{args.model_name}_{exp_info}"
+    exp_info = f"{utils.get_timestamp}_batch{args.batch}_epoch{args.epoch}_lr{args.lr}_k{args.k}"
+    session_name = f"{exp_info}_{args.model_name}"
 
     # Assign fields manually for this example
     field_indices = utils.get_field_indices(train_data)

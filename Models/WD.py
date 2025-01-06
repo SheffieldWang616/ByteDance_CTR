@@ -41,7 +41,7 @@ def train_and_evaluate(X_train, y_train, X_val, y_val, epochs, lr, save_dir, grp
     deep_hidden_units = [input_dim, 64, 32]
     model = WideAndDeep(input_dim_wide=input_dim, input_dim_deep=input_dim, deep_hidden_units=deep_hidden_units).to(device)
     criterion = nn.BCELoss()
-    optimizer = optim.Adam(model.parameters(), lr=lr)
+    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=1e-4)
 
     train_dataset = TensorDataset(
         torch.tensor(X_train.values, dtype=torch.float32),
@@ -130,8 +130,8 @@ if __name__ == "__main__":
     val_data = pd.read_csv("./Data/processed/val.csv")
     print("Data loaded, start training...")
 
-    exp_info = f"batch{args.batch}_epoch{args.epoch}_lr{args.lr}"
-    session_name = f"{args.model_name}_{exp_info}"
+    exp_info = f"{utils.get_timestamp}_batch{args.batch}_epoch{args.epoch}_lr{args.lr}"
+    session_name = f"{exp_info}_{args.model_name}"
 
     def train_model_for_group(train_group, val_group, group_name):
         print(f"Training model for {group_name} group...")

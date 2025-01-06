@@ -70,7 +70,7 @@ def train_and_evaluate(X_train, y_train, X_val, y_val, deep_hidden_units, cross_
     model = DeepCrossNetwork(input_dim, deep_hidden_units, cross_num_layers).to(device)
     print(model)
     criterion = nn.BCELoss()
-    optimizer = optim.Adam(model.parameters(), lr=lr)
+    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=1e-4)
 
     # Prepare data loaders
     train_dataset = TensorDataset(
@@ -167,8 +167,8 @@ if __name__ == "__main__":
     print("Data loaded, start training...")
 
     # Prepare session name
-    exp_info = f"batch{args.batch}_epoch{args.epoch}_lr{args.lr}_cross{args.cross_layers}"
-    session_name = f"{args.model_name}_{exp_info}"
+    exp_info = f"{utils.get_timestamp}_batch{args.batch}_epoch{args.epoch}_lr{args.lr}_cross{args.cross_layers}"
+    session_name = f"{exp_info}_{args.model_name}"
 
     def train_model_for_group(train_group, val_group, group_name):
         print(f"Training model for {group_name} group...")

@@ -85,7 +85,7 @@ def train_and_evaluate(X_train, y_train, X_val, y_val, item_col, seq_cols, embed
     model = DeepInterestNetwork(input_dim, embedding_dim, deep_hidden_units).to(device)
     print(model)
     criterion = nn.BCELoss()
-    optimizer = optim.Adam(model.parameters(), lr=lr)
+    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=1e-4)
 
     # debug
     # print(f"Unique values in item_col (train): {X_train[item_col].nunique()}")
@@ -191,8 +191,9 @@ if __name__ == "__main__":
     val_data = pd.read_csv("./Data/processed/val.csv")
     print("Data loaded, start training...")
 
-    exp_info = f"batch{args.batch}_epoch{args.epoch}_lr{args.lr}_emb{embedding_dim}"
-    session_name = f"{args.model_name}_{exp_info}"
+    exp_info = f"{utils.get_timestamp}_batch{args.batch}_epoch{args.epoch}_lr{args.lr}_emb{embedding_dim}"
+    session_name = f"{exp_info}_{args.model_name}"
+    
 
     def train_model_for_group(train_group, val_group, group_name):
         print(f"Training model for {group_name} group...")

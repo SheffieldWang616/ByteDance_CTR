@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 
 
 def get_timestamp():
-    return datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
+    return datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
 
 
 def set_seed(seed):

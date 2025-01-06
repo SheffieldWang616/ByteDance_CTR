@@ -32,7 +32,7 @@ def train_and_evaluate(X_train, y_train, X_val, y_val, epochs, lr, save_dir, grp
     input_dim = X_train.shape[1]
     model = FactorizationMachineModel(input_dim, k).to(device)
     criterion = nn.BCELoss()
-    optimizer = optim.SGD(model.parameters(), lr=lr)
+    optimizer = optim.SGD(model.parameters(), lr=lr, weight_decay=1e-4)
 
     train_dataset = TensorDataset(
         torch.tensor(X_train.values, dtype=torch.float32),
@@ -125,8 +125,8 @@ if __name__ == "__main__":
     val_data = pd.read_csv("./Data/processed/val.csv")
     print("Data loaded, start training...")
 
-    exp_info = f"batch{args.batch}_epoch{args.epoch}_lr{args.lr}_k{args.k}"
-    session_name = f"{args.model_name}_{exp_info}"
+    exp_info = f"{utils.get_timestamp}_batch{args.batch}_epoch{args.epoch}_lr{args.lr}_k{args.k}"
+    session_name = f"{exp_info}_{args.model_name}"
 
     #train_and_evaluate(X_train, y_train, X_val, y_val, epochs, lr, save_dir, grp_name, batch_size, k, device, session_name):
     def train_model_for_group(train_group, val_group, group_name):

@@ -25,7 +25,7 @@ def train_and_evaluate(X_train, y_train, X_val, y_val, epochs, lr, save_dir, grp
     input_dim = X_train.shape[1]
     model = LogisticRegressionModel(input_dim).to(device)  # Move model to the correct device
     criterion = nn.BCELoss()
-    optimizer = optim.SGD(model.parameters(), lr=lr)
+    optimizer = optim.SGD(model.parameters(), lr=lr, weight_decay=1e-2)
 
     # Convert data to PyTorch tensors
     train_dataset = TensorDataset(
@@ -138,8 +138,8 @@ if __name__ == "__main__":
     val_data = pd.read_csv("./Data/processed/val.csv")
     print("Data Loaded, start training...")
 
-    exp_info = f"batch{args.batch}_epoch{args.epoch}_lr{args.lr}"
-    session_name = f"{args.model_name}_{exp_info}"
+    exp_info = f"{utils.get_timestamp}_batch{args.batch}_epoch{args.epoch}_lr{args.lr}"
+    session_name = f"{exp_info}_{args.model_name}"
     
 
     def train_model_for_group(train_group, val_group, group_name):
