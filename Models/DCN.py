@@ -167,7 +167,8 @@ if __name__ == "__main__":
     print("Data loaded, start training...")
 
     # Prepare session name
-    exp_info = f"{utils.get_timestamp}_batch{args.batch}_epoch{args.epoch}_lr{args.lr}_cross{args.cross_layers}"
+    stamp = utils.get_timestamp()
+    exp_info = f"{stamp}_batch{args.batch}_epoch{args.epoch}_lr{args.lr}_cross{args.cross_layers}"
     session_name = f"{exp_info}_{args.model_name}"
 
     def train_model_for_group(train_group, val_group, group_name):

@@ -125,7 +125,8 @@ if __name__ == "__main__":
     val_data = pd.read_csv("./Data/processed/val.csv")
     print("Data loaded, start training...")
 
-    exp_info = f"{utils.get_timestamp}_batch{args.batch}_epoch{args.epoch}_lr{args.lr}_k{args.k}"
+    stamp = utils.get_timestamp()
+    exp_info = f"{stamp}_batch{args.batch}_epoch{args.epoch}_lr{args.lr}_k{args.k}"
     session_name = f"{exp_info}_{args.model_name}"
 
     #train_and_evaluate(X_train, y_train, X_val, y_val, epochs, lr, save_dir, grp_name, batch_size, k, device, session_name):

@@ -191,7 +191,8 @@ if __name__ == "__main__":
     val_data = pd.read_csv("./Data/processed/val.csv")
     print("Data loaded, start training...")
 
-    exp_info = f"{utils.get_timestamp}_batch{args.batch}_epoch{args.epoch}_lr{args.lr}_emb{embedding_dim}"
+    stamp = utils.get_timestamp()
+    exp_info = f"{stamp}_batch{args.batch}_epoch{args.epoch}_lr{args.lr}_emb{embedding_dim}"
     session_name = f"{exp_info}_{args.model_name}"
     
 

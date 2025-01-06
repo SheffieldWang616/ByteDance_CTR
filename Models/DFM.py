@@ -177,7 +177,8 @@ if __name__ == "__main__":
     field_indices = utils.get_field_indices(train_data)
 
     # Prepare session name
-    exp_info = f"{utils.get_timestamp}_batch{args.batch}_epoch{args.epoch}_lr{args.lr}"
+    stamp = utils.get_timestamp()
+    exp_info = f"{stamp}_batch{args.batch}_epoch{args.epoch}_lr{args.lr}"
     session_name = f"{exp_info}_{args.model_name}"
 
     def train_model_for_group(train_group, val_group, group_name):
