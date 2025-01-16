@@ -8,6 +8,8 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
 from sklearn.metrics import roc_auc_score, precision_score, recall_score
 
+from torch.utils.tensorboard import SummaryWriter
+
 # Import utilities
 import utils
 
@@ -65,9 +67,8 @@ class DeepFM(nn.Module):
         return output
 
 
-def train_and_evaluate(X_train, y_train, X_val, y_val, field_indices, hidden_unit, epochs, lr, save_dir, grp_name, batch_size, device, session_name):
+def train_and_evaluate(X_train, y_train, X_val, y_val, field_indices, hidden_unit, embedding_dim, epochs, lr, reg, save_dir, grp_name, batch_size, device, session_name):
     input_dim = X_train.shape[1]
-    embedding_dim = 10
 
     deep_hidden_units = [input_dim] + hidden_unit  # Deep network architecture after input layer
 
@@ -78,7 +79,10 @@ def train_and_evaluate(X_train, y_train, X_val, y_val, field_indices, hidden_uni
     print(model)
     
     criterion = nn.BCELoss()
-    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=1e-4)
+    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=reg)
+
+    log_dir = os.path.join(save_dir, "DeepFM_event", session_name, grp_name)
+    writer = SummaryWriter(log_dir)
 
     # Prepare data loaders
     train_dataset = TensorDataset(
@@ -137,6 +141,14 @@ def train_and_evaluate(X_train, y_train, X_val, y_val, field_indices, hidden_uni
         recall_scores.append(recall)
 
         print(f"Train Loss: {epoch_train_loss:.4f}, Val Loss: {epoch_val_loss:.4f}, AUC: {auc:.4f}, Precision: {precision:.4f}, Recall: {recall:.4f}")
+        
+        writer.add_scalar("Loss_Train", epoch_train_loss, epoch)
+        writer.add_scalar("Loss_Validation", epoch_val_loss, epoch)
+        writer.add_scalar("AUC_Validation", auc, epoch)
+        writer.add_scalar("Precision_Validation", precision, epoch)
+        writer.add_scalar("Recall_Validation", recall, epoch)
+
+    writer.close()
 
     # Plot metrics
     utils.plot_metrics(train_losses, val_losses, auc_scores, precision_scores, recall_scores, save_dir, grp_name, session_name)
@@ -155,7 +167,9 @@ if __name__ == "__main__":
     parser.add_argument("--batch", type=int, default=1024, help="Batch size for training")
     parser.add_argument("--epoch", type=int, default=10, help="Number of epochs")
     parser.add_argument("--lr", type=float, default=0.001, help="Learning rate")
-    parser.add_argument("--hidden_units", type=str, default="64,32", help="Comma-separated list of hidden units for the deep network")
+    parser.add_argument("--reg",type = float, default = 1e-4, help="Regularization Strength")
+    parser.add_argument("--hidden_units", type=str, default="512,64,32", help="Comma-separated list of hidden units for the deep network")
+    parser.add_argument("--emb_dim", type=int, default=32, help="Embedding dimension for FM")
     parser.add_argument("--treatment", action="store_true", help="Separate treatment/control groups")
     parser.add_argument("--cuda", action="store_true", help="Enable CUDA if available")
     args = parser.parse_args()
@@ -178,20 +192,20 @@ if __name__ == "__main__":
 
     # Prepare session name
     stamp = utils.get_timestamp()
-    exp_info = f"{stamp}_batch{args.batch}_epoch{args.epoch}_lr{args.lr}"
+    exp_info = f"{stamp}_batch{args.batch}_epoch{args.epoch}_lr{args.lr}_reg{args.reg}_emb{args.emb_dim}"
     session_name = f"{exp_info}_{args.model_name}"
 
     def train_model_for_group(train_group, val_group, group_name):
         print(f"Training model for {group_name} group...")
         X_train, y_train = utils.split_features_and_target(train_group)
         X_val, y_val = utils.split_features_and_target(val_group)
-        return train_and_evaluate(X_train, y_train, X_val, y_val, field_indices, deep_hidden_unit, args.epoch, args.lr,
+        return train_and_evaluate(X_train, y_train, X_val, y_val, field_indices, deep_hidden_unit, args.emb_dim, args.epoch, args.lr, args.reg,
                                   args.save_dir, group_name, args.batch, device, session_name)
 
     if not args.treatment:
         X_train, y_train = utils.split_features_and_target(train_data)
         X_val, y_val = utils.split_features_and_target(val_data)
-        train_and_evaluate(X_train, y_train, X_val, y_val, field_indices, deep_hidden_unit, args.epoch, args.lr,
+        train_and_evaluate(X_train, y_train, X_val, y_val, field_indices, deep_hidden_unit, args.emb_dim, args.epoch, args.lr, args.reg,
                            args.save_dir, "combined", args.batch, device, session_name)
     else:
         train_treatment = utils.filter_data_by_treatment(train_data, 1)

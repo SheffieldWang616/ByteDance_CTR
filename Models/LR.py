@@ -7,6 +7,8 @@ import torch.nn as nn
 import torch.optim as optim
 from sklearn.metrics import roc_auc_score, precision_score, recall_score
 
+from torch.utils.tensorboard import SummaryWriter
+
 # Import utilities
 import utils
 
@@ -21,11 +23,14 @@ class LogisticRegressionModel(nn.Module):
 
 from torch.utils.data import DataLoader, TensorDataset
 
-def train_and_evaluate(X_train, y_train, X_val, y_val, epochs, lr, save_dir, grp_name=None, model_name=None, batch_size=1024):
+def train_and_evaluate(X_train, y_train, X_val, y_val, epochs, lr, reg, save_dir, grp_name=None, model_name=None, batch_size=1024):
     input_dim = X_train.shape[1]
     model = LogisticRegressionModel(input_dim).to(device)  # Move model to the correct device
     criterion = nn.BCELoss()
-    optimizer = optim.SGD(model.parameters(), lr=lr, weight_decay=1e-2)
+    optimizer = optim.SGD(model.parameters(), lr=lr, weight_decay=reg)
+
+    log_dir = os.path.join(save_dir, "LR_event", model_name, grp_name)
+    writer = SummaryWriter(log_dir)
 
     # Convert data to PyTorch tensors
     train_dataset = TensorDataset(
@@ -105,6 +110,14 @@ def train_and_evaluate(X_train, y_train, X_val, y_val, epochs, lr, save_dir, grp
 
         print(f"Train Loss: {epoch_train_loss:.4f}, Val Loss: {epoch_val_loss:.4f}, AUC: {auc:.4f}, Precision: {precision:.4f}, Recall: {recall:.4f}")
 
+        writer.add_scalar("Loss_Train", epoch_train_loss, epoch)
+        writer.add_scalar("Loss_Validation", epoch_val_loss, epoch)
+        writer.add_scalar("AUC_Validation", auc, epoch)
+        writer.add_scalar("Precision_Validation", precision, epoch)
+        writer.add_scalar("Recall_Validation", recall, epoch)
+
+    writer.close()
+
     # Plot metrics
     utils.plot_metrics(train_losses, val_losses, auc_scores, precision_scores, recall_scores, save_dir, grp_name, model_name)
     model_save_path = os.path.join(save_dir, model_name, f"{grp_name}.pth")
@@ -122,6 +135,7 @@ if __name__ == "__main__":
     parser.add_argument("--batch", type=int, default=1024, help="Input batch size for batched training")
     parser.add_argument("--epoch", type=int, default=10, help="Number of training epochs")
     parser.add_argument("--lr", type=float, default=0.01, help="Learning rate for optimizer")
+    parser.add_argument("--reg", type =float,default = 1e-4, help="Regularization Strength")
     parser.add_argument("--treatment", action="store_true", help="Whether to include treatment as a feature")
     parser.add_argument("--cuda", action="store_true", help="Enable CUDA training")
     args = parser.parse_args()
@@ -139,7 +153,7 @@ if __name__ == "__main__":
     print("Data Loaded, start training...")
 
     stamp = utils.get_timestamp()
-    exp_info = f"{stamp}_batch{args.batch}_epoch{args.epoch}_lr{args.lr}"
+    exp_info = f"{stamp}_batch{args.batch}_epoch{args.epoch}_lr{args.lr}_reg{args.reg}"
     session_name = f"{exp_info}_{args.model_name}"
     
 
@@ -147,13 +161,13 @@ if __name__ == "__main__":
         print(f"Training model for {group_name} group...")
         X_train, y_train = utils.split_features_and_target(train_group)
         X_val, y_val = utils.split_features_and_target(val_group)
-        return train_and_evaluate(X_train, y_train, X_val, y_val, epochs=args.epoch, lr=args.lr, save_dir=args.save_dir, grp_name=group_name, model_name=session_name, batch_size=args.batch)
+        return train_and_evaluate(X_train, y_train, X_val, y_val, epochs=args.epoch, lr=args.lr, reg = args.reg, save_dir=args.save_dir, grp_name=group_name, model_name=session_name, batch_size=args.batch)
 
     if not args.treatment:
         # Combined group training
         X_train, y_train = utils.split_features_and_target(train_data)
         X_val, y_val = utils.split_features_and_target(val_data)
-        train_and_evaluate(X_train, y_train, X_val, y_val, epochs=args.epoch, lr=args.lr, save_dir=args.save_dir, grp_name="combined", model_name=session_name, batch_size=args.batch)
+        train_and_evaluate(X_train, y_train, X_val, y_val, epochs=args.epoch, lr=args.lr, reg = args.reg, save_dir=args.save_dir, grp_name="combined", model_name=session_name, batch_size=args.batch)
     else:
         # Treatment group
         train_treatment = utils.filter_data_by_treatment(train_data, 1)

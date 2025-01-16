@@ -7,6 +7,9 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
 from sklearn.metrics import roc_auc_score, precision_score, recall_score
+from sklearn.preprocessing import MinMaxScaler
+
+from torch.utils.tensorboard import SummaryWriter
 
 # Import utilities
 import utils
@@ -20,9 +23,9 @@ class AttentionUnit(nn.Module):
     def __init__(self, input_dim):
         super(AttentionUnit, self).__init__()
         self.attention_layer = nn.Sequential(
-            nn.Linear(input_dim * 4, 64),
+            nn.Linear(input_dim * 4, input_dim),
             nn.ReLU(),
-            nn.Linear(64, 1)
+            nn.Linear(input_dim, 1)
         )
 
     def forward(self, query, keys):
@@ -85,7 +88,7 @@ def train_and_evaluate(X_train, y_train, X_val, y_val, item_col, seq_cols, embed
     model = DeepInterestNetwork(input_dim, embedding_dim, deep_hidden_units).to(device)
     print(model)
     criterion = nn.BCELoss()
-    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=1e-4)
+    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=args.reg)
 
     # debug
     # print(f"Unique values in item_col (train): {X_train[item_col].nunique()}")
@@ -98,6 +101,8 @@ def train_and_evaluate(X_train, y_train, X_val, y_val, item_col, seq_cols, embed
     X_val[seq_cols] = X_val[seq_cols].clip(0, input_dim - 1)
     X_val[item_col] = X_val[item_col].clip(0, input_dim - 1)
 
+    log_dir = os.path.join(save_dir, "DIN_event", session_name, grp_name)
+    writer = SummaryWriter(log_dir)
 
     train_dataset = TensorDataset(
         torch.tensor(X_train[item_col].values, dtype=torch.long),
@@ -156,6 +161,14 @@ def train_and_evaluate(X_train, y_train, X_val, y_val, item_col, seq_cols, embed
 
         print(f"Train Loss: {epoch_train_loss:.4f}, Val Loss: {epoch_val_loss:.4f}, AUC: {auc:.4f}, Precision: {precision:.4f}, Recall: {recall:.4f}")
 
+        writer.add_scalar("Loss_Train", epoch_train_loss, epoch)
+        writer.add_scalar("Loss_Validation", epoch_val_loss, epoch)
+        writer.add_scalar("AUC_Validation", auc, epoch)
+        writer.add_scalar("Precision_Validation", precision, epoch)
+        writer.add_scalar("Recall_Validation", recall, epoch)
+    
+    writer.close()
+
     utils.plot_metrics(train_losses, val_losses, auc_scores, precision_scores, recall_scores, save_dir, grp_name, session_name)
 
     model_save_path = os.path.join(save_dir, session_name, f"{grp_name}_din.pth")
@@ -171,7 +184,8 @@ if __name__ == "__main__":
     parser.add_argument("--batch", type=int, default=1024, help="Batch size for training")
     parser.add_argument("--epoch", type=int, default=10, help="Number of epochs")
     parser.add_argument("--lr", type=float, default=0.001, help="Learning rate")
-    parser.add_argument("--hidden_units", type=str, default="64,32", help="Comma-separated list of hidden units for the deep network")
+    parser.add_argument("--reg",type = float, default = 1e-4, help="Regularization Strength")
+    parser.add_argument("--hidden_units", type=str, default="512,64,32", help="Comma-separated list of hidden units for the deep network")
     parser.add_argument("--item_col", type=str, default = "exposure", help="Column name for the target item")
     parser.add_argument("--seq_cols", type=str, default= "f0,f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11", help="Comma-separated column names for the sequence")
     parser.add_argument("--treatment", action="store_true", help="Separate treatment/control groups")
@@ -180,19 +194,23 @@ if __name__ == "__main__":
 
     deep_hidden_unit = list(map(int, args.hidden_units.split(',')))
     seq_cols = args.seq_cols.split(',')
-    embedding_dim = args.hidden_units[0]
+    embedding_dim = deep_hidden_unit[0]  # First hidden layer must match embedding_dim
 
     utils.set_seed(42)
     device = torch.device("cuda" if args.cuda and torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
     print("Loading data...")
-    train_data = pd.read_csv("./Data/processed/train.csv")
-    val_data = pd.read_csv("./Data/processed/val.csv")
+    train_data_raw = pd.read_csv("./Data/processed/train.csv")
+    val_data_raw = pd.read_csv("./Data/processed/val.csv")
+
+    scaler = MinMaxScaler()
+    train_data = pd.DataFrame(scaler.fit_transform(train_data_raw), columns=train_data_raw.columns)
+    val_data = pd.DataFrame(scaler.transform(val_data_raw), columns=val_data_raw.columns)
     print("Data loaded, start training...")
 
     stamp = utils.get_timestamp()
-    exp_info = f"{stamp}_batch{args.batch}_epoch{args.epoch}_lr{args.lr}_emb{embedding_dim}"
+    exp_info = f"{stamp}_batch{args.batch}_epoch{args.epoch}_lr{args.lr}_reg{args.reg}_emb{embedding_dim}"
     session_name = f"{exp_info}_{args.model_name}"
     
 

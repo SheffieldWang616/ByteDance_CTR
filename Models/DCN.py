@@ -7,6 +7,9 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
 from sklearn.metrics import roc_auc_score, precision_score, recall_score
+from sklearn.preprocessing import MinMaxScaler
+
+from torch.utils.tensorboard import SummaryWriter
 
 # Import utilities
 import utils
@@ -70,7 +73,10 @@ def train_and_evaluate(X_train, y_train, X_val, y_val, deep_hidden_units, cross_
     model = DeepCrossNetwork(input_dim, deep_hidden_units, cross_num_layers).to(device)
     print(model)
     criterion = nn.BCELoss()
-    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=1e-4)
+    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=args.reg)
+
+    log_dir = os.path.join(save_dir, "DCN_event", session_name, grp_name)
+    writer = SummaryWriter(log_dir)
 
     # Prepare data loaders
     train_dataset = TensorDataset(
@@ -98,7 +104,7 @@ def train_and_evaluate(X_train, y_train, X_val, y_val, deep_hidden_units, cross_
             loss = criterion(outputs, batch_y)
             loss.backward()
             optimizer.step()
-            epoch_train_loss += loss.item()
+            epoch_train_loss = epoch_train_loss +  loss.item()
         epoch_train_loss /= len(train_loader)
 
         # Validation
@@ -130,6 +136,14 @@ def train_and_evaluate(X_train, y_train, X_val, y_val, deep_hidden_units, cross_
 
         print(f"Train Loss: {epoch_train_loss:.4f}, Val Loss: {epoch_val_loss:.4f}, AUC: {auc:.4f}, Precision: {precision:.4f}, Recall: {recall:.4f}")
 
+        writer.add_scalar("Loss_Train", epoch_train_loss, epoch)
+        writer.add_scalar("Loss_Validation", epoch_val_loss, epoch)
+        writer.add_scalar("AUC_Validation", auc, epoch)
+        writer.add_scalar("Precision_Validation", precision, epoch)
+        writer.add_scalar("Recall_Validation", recall, epoch)
+
+    writer.close()
+
     # Plot metrics
     utils.plot_metrics(train_losses, val_losses, auc_scores, precision_scores, recall_scores, save_dir, grp_name, session_name)
 
@@ -147,7 +161,8 @@ if __name__ == "__main__":
     parser.add_argument("--batch", type=int, default=1024, help="Batch size for training")
     parser.add_argument("--epoch", type=int, default=10, help="Number of epochs")
     parser.add_argument("--lr", type=float, default=0.001, help="Learning rate")
-    parser.add_argument("--hidden_units", type=str, default="64,32", help="Comma-separated list of hidden units for the deep network")
+    parser.add_argument("--reg", type =float,default = 1e-4, help="Regularization Strength")
+    parser.add_argument("--hidden_units", type=str, default="512,64,32", help="Comma-separated list of hidden units for the deep network")
     parser.add_argument("--cross_layers", type=int, default=3, help="Number of cross layers in the Cross Network")
     parser.add_argument("--treatment", action="store_true", help="Separate treatment/control groups")
     parser.add_argument("--cuda", action="store_true", help="Enable CUDA if available")
@@ -162,13 +177,17 @@ if __name__ == "__main__":
 
     # Load data
     print("Loading data...")
-    train_data = pd.read_csv("./Data/processed/train.csv")
-    val_data = pd.read_csv("./Data/processed/val.csv")
+    train_data_raw = pd.read_csv("./Data/processed/train.csv")
+    val_data_raw = pd.read_csv("./Data/processed/val.csv")
+    
+    scaler = MinMaxScaler()
+    train_data = pd.DataFrame(scaler.fit_transform(train_data_raw), columns=train_data_raw.columns)
+    val_data = pd.DataFrame(scaler.transform(val_data_raw), columns=val_data_raw.columns)
     print("Data loaded, start training...")
 
     # Prepare session name
     stamp = utils.get_timestamp()
-    exp_info = f"{stamp}_batch{args.batch}_epoch{args.epoch}_lr{args.lr}_cross{args.cross_layers}"
+    exp_info = f"{stamp}_batch{args.batch}_epoch{args.epoch}_lr{args.lr}_reg{args.reg}_cross{args.cross_layers}"
     session_name = f"{exp_info}_{args.model_name}"
 
     def train_model_for_group(train_group, val_group, group_name):

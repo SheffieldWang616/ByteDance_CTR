@@ -8,6 +8,8 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
 from sklearn.metrics import roc_auc_score, precision_score, recall_score
 
+from torch.utils.tensorboard import SummaryWriter
+
 # Import utilities
 import utils
 
@@ -19,7 +21,7 @@ class WideAndDeep(nn.Module):
         self.wide = nn.Linear(input_dim_wide, 1)
         
         # Deep part: Feedforward neural network
-        layers = []
+        layers = [nn.Linear(input_dim_deep, deep_hidden_units[0]), nn.ReLU()]
         for i in range(len(deep_hidden_units) - 1):
             layers.append(nn.Linear(deep_hidden_units[i], deep_hidden_units[i + 1]))
             layers.append(nn.ReLU())
@@ -35,13 +37,16 @@ class WideAndDeep(nn.Module):
         return torch.sigmoid(self.output(combined))
 
 
-def train_and_evaluate(X_train, y_train, X_val, y_val, epochs, lr, save_dir, grp_name, batch_size, device, session_name, input_dim):
+def train_and_evaluate(X_train, y_train, X_val, y_val, epochs, lr, reg, deep_hidden_unit, save_dir, grp_name, batch_size, device, session_name, input_dim):
     
     # define hidden units for deep part
-    deep_hidden_units = [input_dim, 64, 32]
+    deep_hidden_units = [input_dim] + deep_hidden_unit
     model = WideAndDeep(input_dim_wide=input_dim, input_dim_deep=input_dim, deep_hidden_units=deep_hidden_units).to(device)
     criterion = nn.BCELoss()
-    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=1e-4)
+    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=reg)
+
+    log_dir = os.path.join(save_dir, "WD_event", session_name, grp_name)
+    writer = SummaryWriter(log_dir)
 
     train_dataset = TensorDataset(
         torch.tensor(X_train.values, dtype=torch.float32),
@@ -100,6 +105,14 @@ def train_and_evaluate(X_train, y_train, X_val, y_val, epochs, lr, save_dir, grp
 
         print(f"Train Loss: {epoch_train_loss:.4f}, Val Loss: {epoch_val_loss:.4f}, AUC: {auc:.4f}, Precision: {precision:.4f}, Recall: {recall:.4f}")
 
+        writer.add_scalar("Loss_Train", epoch_train_loss, epoch)
+        writer.add_scalar("Loss_Validation", epoch_val_loss, epoch)
+        writer.add_scalar("AUC_Validation", auc, epoch)
+        writer.add_scalar("Precision_Validation", precision, epoch)
+        writer.add_scalar("Recall_Validation", recall, epoch)
+
+    writer.close()
+
     # Pass model_name to plot_metrics
     utils.plot_metrics(train_losses, val_losses, auc_scores, precision_scores, recall_scores, save_dir, grp_name, session_name)
 
@@ -116,9 +129,13 @@ if __name__ == "__main__":
     parser.add_argument("--batch", type=int, default=1024, help="Batch size for training")
     parser.add_argument("--epoch", type=int, default=10, help="Number of epochs")
     parser.add_argument("--lr", type=float, default=0.01, help="Learning rate")
+    parser.add_argument("--reg", type =float,default = 1e-4, help="Regularization Strength")
+    parser.add_argument("--hidden_units", type=str, default="512,64,32", help="Comma-separated list of hidden units for the deep network")
     parser.add_argument("--treatment", action="store_true", help="Separate treatment/control groups")
     parser.add_argument("--cuda", action="store_true", help="Enable CUDA if available")
     args = parser.parse_args()
+
+    deep_hidden_unit = list(map(int, args.hidden_units.split(',')))
 
     utils.set_seed(42)
 
@@ -131,7 +148,7 @@ if __name__ == "__main__":
     print("Data loaded, start training...")
 
     stamp = utils.get_timestamp()
-    exp_info = f"{stamp}_batch{args.batch}_epoch{args.epoch}_lr{args.lr}"
+    exp_info = f"{stamp}_batch{args.batch}_epoch{args.epoch}_lr{args.lr}_reg{args.reg}"
     session_name = f"{exp_info}_{args.model_name}"
 
     def train_model_for_group(train_group, val_group, group_name):
@@ -139,14 +156,14 @@ if __name__ == "__main__":
         X_train, y_train = utils.split_features_and_target(train_group)
         X_val, y_val = utils.split_features_and_target(val_group)
         input_dim = X_train.shape[1]
-        return train_and_evaluate(X_train, y_train, X_val, y_val, args.epoch, args.lr, 
+        return train_and_evaluate(X_train, y_train, X_val, y_val, args.epoch, args.lr, args.reg, deep_hidden_unit, 
                                   args.save_dir, group_name, args.batch, device, session_name, input_dim)
 
     if not args.treatment:
         X_train, y_train = utils.split_features_and_target(train_data)
         X_val, y_val = utils.split_features_and_target(val_data)
         input_dim = X_train.shape[1]
-        train_and_evaluate(X_train, y_train, X_val, y_val, args.epoch, args.lr, 
+        train_and_evaluate(X_train, y_train, X_val, y_val, args.epoch, args.lr, args.reg, deep_hidden_unit, 
                            args.save_dir, "combined", args.batch, device, session_name, input_dim)
     else:
         train_treatment = utils.filter_data_by_treatment(train_data, 1)
